@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Omni - Gerador de Versão</title>
+  <style>
+    body { font-family: system-ui, Arial; background:#0b1220; color:#e7e7e7; margin:0; }
+    header { padding:18px 22px; background:#121a2c; border-bottom:1px solid rgba(255,255,255,.08); }
+    h1 { margin:0; font-size:18px; }
+    main { display:grid; grid-template-columns: 420px 1fr; gap:16px; padding:16px; }
+    .card { background:#121a2c; border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:14px; }
+    label { display:block; font-size:12px; opacity:.9; margin-top:10px; }
+    input, select, textarea { width:100%; box-sizing:border-box; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,.15); background:#0b1220; color:#fff; }
+    textarea { min-height: 80px; resize: vertical; }
+    .row { display:flex; gap:10px; }
+    .row > div { flex:1; }
+    button { cursor:pointer; border:0; border-radius:10px; padding:10px 12px; font-weight:700; background:#610659; color:#fff; width:100%; margin-top:12px; }
+    button:hover { filter: brightness(1.1); }
+    .hint { font-size:12px; opacity:.8; margin-top:6px; }
+    .log { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; white-space:pre-wrap; line-height:1.45; max-height: calc(100vh - 110px); overflow:auto; }
+    .pill { display:inline-block; padding:4px 8px; border-radius:999px; background:rgba(97,6,89,.25); border:1px solid rgba(97,6,89,.5); font-size:12px; }
+
+    /* =========================
+       Modal de Conflito (addon)
+       ========================= */
+    .conflict-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.65);
+      display: none;            /* abre via JS */
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 99999;
+    }
+    .conflict-modal {
+      width: min(720px, 100%);
+      background: #0f172a; /* combina com tua UI */
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    }
+    .conflict-header {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding: 14px 16px;
+      background: rgba(97,6,89,.20);
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      font-weight: 800;
+    }
+    .conflict-badge {
+      margin-left: auto;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(255,255,255,.10);
+      font-weight: 700;
+      opacity: .95;
+    }
+    .conflict-body {
+      padding: 14px 16px;
+      line-height: 1.45;
+      font-size: 14px;
+    }
+    .conflict-body b { color:#fff; }
+    .conflict-body .danger { color: #ffb4b4; }
+    .conflict-kv {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 8px 12px;
+      font-size: 12px;
+      opacity: .95;
+    }
+    .conflict-kv div {
+      padding: 6px 0;
+      border-bottom: 1px dashed rgba(255,255,255,.08);
+    }
+    .conflict-actions {
+      padding: 14px 16px;
+      display:flex;
+      gap:10px;
+      justify-content:flex-end;
+      flex-wrap: wrap;
+      border-top: 1px solid rgba(255,255,255,.08);
+      background: rgba(255,255,255,.03);
+    }
+    .conflict-actions button {
+      width: auto;
+      margin-top: 0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      font-weight: 800;
+    }
+    .conflict-actions button:hover { filter: brightness(1.1); }
+    .btn-primary {
+      background: #610659 !important;
+      border-color: rgba(97,6,89,.6) !important;
+    }
+    .btn-danger {
+      background: rgba(255, 70, 70, .85) !important;
+      border-color: rgba(255, 70, 70, .55) !important;
+    }
+    .btn-ghost {
+      background: rgba(255,255,255,.06) !important;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Omni • Gerador de Versão <span class="pill">Local UI</span></h1>
+  </header>
+
+  <main>
+    <section class="card">
+      <label>Modo</label>
+      <select id="mode">
+        <option value="beta">Beta (develop → release)</option>
+        <option value="prod">Prod (release → main)</option>
+        <option value="manual">Manual (merge múltiplos)</option>
+        <option value="hotfix">Hotfix (cherry-pick por hash/branch)</option>
+      </select>
+
+      <div id="manualFields" style="display:none">
+        <label>Branches de origem (ex: OMNI-780 OMNI-781)</label>
+        <input id="srcsRaw" placeholder="ex: OMNI-781 OMNI-782" />
+      </div>
+
+      <div id="hotfixFields" style="display:none">
+        <label>Refs/Branches/Commits para hotfix (ex: OMNI-781 ou a1b2c3d4)</label>
+        <input id="refsRaw" placeholder="ex: OMNI-781" />
+        <div class="hint">Se for branch, aplica todos commits novos dela em cada destino.</div>
+      </div>
+
+      <label>Branches destino (ex: develop release main)</label>
+      <input id="dstsRaw" value="develop release main" />
+
+      <label>Cards na versão</label>
+      <div class="row">
+        <div>
+          <label>🐛 Bugs</label>
+          <input id="cntBug" type="number" min="0" value="1" />
+        </div>
+        <div>
+          <label>🔧 Func.</label>
+          <input id="cntFeat" type="number" min="0" value="0" />
+        </div>
+        <div>
+          <label>✨ Melhorias</label>
+          <input id="cntImpr" type="number" min="0" value="0" />
+        </div>
+      </div>
+
+      <label>
+        <input id="breakCompat" type="checkbox" />
+        Quebra compatibilidade (MAJOR)
+      </label>
+
+      <button id="runBtn">Executar</button>
+      <div class="hint">Dica: mantenha o repo limpo (sem alterações não commitadas).</div>
+    </section>
+
+    <section class="card">
+      <div class="hint" style="margin:0 0 10px 0">Logs em tempo real</div>
+      <div id="log" class="log"></div>
+    </section>
+  </main>
+
+  <!-- =========================
+       Modal de conflito (addon)
+       ========================= -->
+  <div id="conflictBackdrop" class="conflict-backdrop">
+    <div class="conflict-modal">
+      <div class="conflict-header">
+        <span>⚠ Conflitos detectados</span>
+        <span id="conflictBadge" class="conflict-badge">PAUSADO</span>
+      </div>
+
+      <div class="conflict-body">
+        <div>
+          O processo foi <b>pausado</b> porque o Git encontrou conflitos.<br />
+          <span class="danger">Resolva os conflitos</span> no VSCode/terminal e rode:
+          <b>git add &lt;arquivos&gt;</b><br />
+          Depois clique em <b>Conflitos resolvidos</b>.
+        </div>
+
+        <div id="conflictInfo" class="conflict-kv"></div>
+
+        <div class="hint" style="margin-top:10px">
+          Se continuar dizendo que há conflitos, faltou resolver/`git add` algum arquivo.
+        </div>
+      </div>
+
+      <div class="conflict-actions">
+        <button id="btnConflictReload" class="btn-ghost" type="button">Recarregar status</button>
+        <button id="btnConflictSkip" class="btn-ghost" type="button" style="display:none;">Pular commit</button>
+        <button id="btnConflictAbort" class="btn-danger" type="button">Abortar</button>
+        <button id="btnConflictContinue" class="btn-primary" type="button">Conflitos resolvidos</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const modeEl = document.getElementById("mode");
+    const manualFields = document.getElementById("manualFields");
+    const hotfixFields = document.getElementById("hotfixFields");
+
+    function refreshFields() {
+      const mode = modeEl.value;
+      manualFields.style.display = (mode === "manual") ? "block" : "none";
+      hotfixFields.style.display = (mode === "hotfix") ? "block" : "none";
+    }
+    modeEl.addEventListener("change", refreshFields);
+    refreshFields();
+
+    const logEl = document.getElementById("log");
+    function append(line) {
+      logEl.textContent += line + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // SSE log stream
+    const ev = new EventSource("/events");
+    ev.onmessage = (e) => {
+      try {
+        const { line } = JSON.parse(e.data);
+        append(line);
+
+        // Se o servidor avisar que pausou, tentamos abrir o modal imediatamente
+        if (String(line).includes("⏸")) {
+          refreshStatus().catch(() => {});
+        }
+      } catch {
+        append(e.data);
+      }
+    };
+
+    document.getElementById("runBtn").addEventListener("click", async () => {
+      append("\n==============================");
+      append("➡️ Executando...");
+      append("==============================");
+
+      const payload = {
+        mode: modeEl.value,
+        srcsRaw: document.getElementById("srcsRaw").value,
+        refsRaw: document.getElementById("refsRaw").value,
+        dstsRaw: document.getElementById("dstsRaw").value,
+        cntBug: document.getElementById("cntBug").value,
+        cntFeat: document.getElementById("cntFeat").value,
+        cntImpr: document.getElementById("cntImpr").value,
+        breakCompat: document.getElementById("breakCompat").checked
+      };
+
+      const r = await fetch("/run", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const j = await r.json().catch(() => ({}));
+      if (!j.ok) append("❌ Falha ao iniciar execução.");
+
+      // após iniciar, tenta buscar status (se já estiver pausado, abre modal)
+      refreshStatus().catch(() => {});
+    });
+
+    // ============================
+    // Tratamento de conflito (addon)
+    // ============================
+    const conflictBackdrop = document.getElementById("conflictBackdrop");
+    const conflictInfo = document.getElementById("conflictInfo");
+    const conflictBadge = document.getElementById("conflictBadge");
+
+    const btnConflictReload = document.getElementById("btnConflictReload");
+    const btnConflictSkip = document.getElementById("btnConflictSkip");
+    const btnConflictAbort = document.getElementById("btnConflictAbort");
+    const btnConflictContinue = document.getElementById("btnConflictContinue");
+
+    function openConflictModal(pauseState) {
+      conflictBadge.textContent = "PAUSADO";
+
+      const rows = [
+        ["Modo", pauseState?.mode ?? "-"],
+        ["Destino", pauseState?.dst ?? "-"],
+        ["Versão", pauseState?.fullVer ?? "-"],
+        ["dstIndex", pauseState?.dstIndex ?? "-"],
+        ["commitIndex", pauseState?.commitIndex ?? "-"],
+      ];
+
+      conflictInfo.innerHTML = rows
+        .map(([k, v]) => `<div><b>${k}</b></div><div>${String(v)}</div>`)
+        .join("");
+
+      // Seu backend atual expõe pauseState.mode === "hotfix" quando pausou em cherry-pick
+      const showSkip = pauseState?.mode === "hotfix";
+      btnConflictSkip.style.display = showSkip ? "inline-block" : "none";
+
+      conflictBackdrop.style.display = "flex";
+    }
+
+    function closeConflictModal() {
+      conflictBackdrop.style.display = "none";
+    }
+
+    async function fetchStatus() {
+      const r = await fetch("/status");
+      const j = await r.json().catch(() => ({}));
+      return j;
+    }
+
+    async function refreshStatus() {
+      const st = await fetchStatus();
+
+      if (st?.paused && st?.pauseState) {
+        openConflictModal(st.pauseState);
+      } else {
+        closeConflictModal();
+      }
+
+      return st;
+    }
+
+    async function postJson(path) {
+      const r = await fetch(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}"
+      });
+
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error || `Erro em ${path}`);
+      return j;
+    }
+
+    btnConflictReload.addEventListener("click", () => {
+      refreshStatus().catch((e) => append("❌ " + (e?.message || String(e))));
+    });
+
+    // ✅ Botão "Conflitos resolvidos" (CONTINUE)
+    btnConflictContinue.addEventListener("click", async () => {
+      try {
+        append("▶️ Continuando após conflitos...");
+
+        await postJson("/continue");
+
+        // se continuou e ainda pausou, o status vai reabrir o modal
+        await refreshStatus();
+      } catch (e) {
+        append("❌ " + (e?.message || String(e)));
+        // se ainda tem conflitos (409 still_conflicts), continua aberto
+        refreshStatus().catch(() => {});
+      }
+    });
+
+    btnConflictSkip.addEventListener("click", async () => {
+      try {
+        append("⏭ Pulando commit do cherry-pick...");
+        await postJson("/skip");
+        await refreshStatus();
+      } catch (e) {
+        append("❌ " + (e?.message || String(e)));
+        refreshStatus().catch(() => {});
+      }
+    });
+
+    btnConflictAbort.addEventListener("click", async () => {
+      try {
+        append("🛑 Abortando operação...");
+        await postJson("/abort");
+        await refreshStatus();
+      } catch (e) {
+        append("❌ " + (e?.message || String(e)));
+        refreshStatus().catch(() => {});
+      }
+    });
+
+    // opcional: checa status ao carregar (se já estiver pausado, abre modal)
+    refreshStatus().catch(() => {});
+  </script>
+</body>
+</html>

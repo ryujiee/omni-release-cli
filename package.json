@@ -1,0 +1,14 @@
+{
+  "name": "omni-release-cli",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "omni-release": "./omni-release.mjs"
+  },
+  "dependencies": {
+    "execa": "^9.6.0",
+    "express": "^5.2.1",
+    "inquirer": "^12.0.0",
+    "semver": "^7.7.2"
+  }
+}
