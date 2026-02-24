@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 
 const app = express();
 
-const PROJECT_DIR = "/New-Omni";
+const PROJECT_DIR = "/home/eduardo/apps/New-Omni";
 const VERSION_FILE = "frontend/public/VERSION";
 const VER_FILES = ["frontend/public/VERSION", "VERSION", "frontend/.env.version"];
 
